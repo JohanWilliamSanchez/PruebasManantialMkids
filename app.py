@@ -1,3 +1,4 @@
+```python
 import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
@@ -10,7 +11,6 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 def cargar_datos(nombre_hoja):
     try:
         df = conn.read(worksheet=nombre_hoja, ttl=0)
-        # Limpiar espacios Y caracteres invisibles de los nombres de columna
         df.columns = df.columns.str.strip().str.replace('\xa0', ' ').str.replace('\u200b', '')
         return df.fillna("")
     except Exception:
@@ -21,13 +21,11 @@ def guardar_datos(nombre_hoja, df_nuevo):
     if df_existente.empty:
         df_final = df_nuevo
     else:
-        # Unir sin forzar orden de columnas — evita borrar datos
         df_final = pd.concat([df_existente, df_nuevo], ignore_index=True)
     conn.update(worksheet=nombre_hoja, data=df_final)
     st.cache_data.clear()
 
 def limpiar_id(serie):
-    """Quita el .0 que pandas agrega a números leídos como float"""
     return serie.astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
 
 st.title("⛪ Sistema de Gestión Manantial Mkids")
@@ -39,9 +37,8 @@ with tabs[0]:
     st.subheader("Registrar Asistencia")
     df_est = cargar_datos("Estudiantes")
 
-    # DEBUG temporal - muestra columnas para verificar
-    if not df_est.empty:
-        col_id = df_est.columns[0]  # Toma la primera columna como ID sin importar el nombre exacto
+    if not df_est.empty and len(df_est.columns) > 0:
+        col_id = df_est.columns[0]
         df_est[col_id] = limpiar_id(df_est[col_id])
         df_est['Selector'] = df_est[col_id] + " - " + df_est['Primer Nombre'] + " " + df_est['Primer Apellido']
         seleccion = st.selectbox("Seleccione el Estudiante", df_est['Selector'].tolist())
@@ -74,7 +71,7 @@ with tabs[1]:
 
         if st.form_submit_button("Guardar"):
             df_est_actual = cargar_datos("Estudiantes")
-            col_nombre = df_est_actual.columns[0] if not df_est_actual.empty else "Identificación"
+            col_nombre = df_est_actual.columns[0] if not df_est_actual.empty and len(df_est_actual.columns) > 0 else "Identificación"
             nuevo_e = pd.DataFrame([{
                 col_nombre: id_e,
                 "Primer Nombre": p_n,
@@ -111,8 +108,8 @@ with tabs[3]:
     df_e = cargar_datos("Estudiantes")
     df_a = cargar_datos("Acudiente")
 
-    if not df_e.empty and not df_a.empty:
-        col_id_est = df_e.columns[0]  # Primera columna = Identificación
+    if not df_e.empty and not df_a.empty and len(df_e.columns) > 0:
+        col_id_est = df_e.columns[0]
         df_e[col_id_est] = limpiar_id(df_e[col_id_est])
         df_a['Cedula Acudiente'] = limpiar_id(df_a['Cedula Acudiente'])
 
@@ -145,30 +142,38 @@ with tabs[4]:
     df_asist = cargar_datos("Asistencia")
     df_est = cargar_datos("Estudiantes")
 
-    if not df_asist.empty:
+    if df_asist.empty or df_est.empty:
+        st.info("No hay registros de asistencia aún.")
+    else:
         df_asist['Fecha Asistencia'] = df_asist['Fecha Asistencia'].astype(str).str[:10]
         df_hoy = df_asist[df_asist['Fecha Asistencia'] == hoy].copy()
 
-        if not df_hoy.empty:
-            col_id_est = df_est.columns[0]  # Primera columna = Identificación
-            df_hoy['Identificacion Estudiante'] = limpiar_id(df_hoy['Identificacion Estudiante'])
-            df_est[col_id_est] = limpiar_id(df_est[col_id_est])
-
-            df_hoy = df_hoy.merge(
-                df_est[[col_id_est, 'Primer Nombre', 'Primer Apellido']],
-                left_on='Identificacion Estudiante',
-                right_on=col_id_est,
-                how='left'
-            )
-            df_hoy['Nombre Completo'] = df_hoy['Primer Nombre'] + " " + df_hoy['Primer Apellido']
-
-            st.metric("Total asistentes hoy", len(df_hoy))
-            st.dataframe(
-                df_hoy[['Nombre Completo', 'Identificacion Estudiante', 'Hora Asistencia']],
-                use_container_width=True,
-                hide_index=True
-            )
-        else:
+        if df_hoy.empty:
             st.info("No hay registros de asistencia para hoy todavía.")
-    else:
-        st.info("No hay registros de asistencia aún.")
+        else:
+            col_id_est = df_est.columns[0] if len(df_est.columns) > 0 else None
+
+            if col_id_est is None:
+                st.error("No se pudo leer la columna de identificación de estudiantes.")
+            else:
+                df_hoy['Identificacion Estudiante'] = limpiar_id(df_hoy['Identificacion Estudiante'])
+                df_est[col_id_est] = limpiar_id(df_est[col_id_est])
+
+                df_hoy = df_hoy.merge(
+                    df_est[[col_id_est, 'Primer Nombre', 'Primer Apellido']],
+                    left_on='Identificacion Estudiante',
+                    right_on=col_id_est,
+                    how='left'
+                )
+
+                df_hoy['Primer Nombre'] = df_hoy['Primer Nombre'].fillna("Desconocido")
+                df_hoy['Primer Apellido'] = df_hoy['Primer Apellido'].fillna("")
+                df_hoy['Nombre Completo'] = df_hoy['Primer Nombre'] + " " + df_hoy['Primer Apellido']
+
+                st.metric("Total asistentes hoy", len(df_hoy))
+                st.dataframe(
+                    df_hoy[['Nombre Completo', 'Identificacion Estudiante', 'Hora Asistencia']],
+                    use_container_width=True,
+                    hide_index=True
+                )
+```
