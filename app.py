@@ -17,28 +17,27 @@ def cargar_datos(nombre_hoja):
 
 def guardar_datos(nombre_hoja, df_nuevo):
     df_existente = cargar_datos(nombre_hoja)
-    
     if df_existente.empty:
         df_final = df_nuevo
     else:
-        # Alinear columnas para evitar desorden
         df_final = pd.concat([df_existente, df_nuevo], ignore_index=True)
-        df_final = df_final[df_existente.columns]  # <- mantiene el orden de columnas original
-    
+        df_final = df_final[df_existente.columns]
     conn.update(worksheet=nombre_hoja, data=df_final)
-    st.cache_data.clear()  # <- fuerza recarga en la siguiente lectura
+    st.cache_data.clear()
 
 st.title("⛪ Sistema de Gestión Manantial Mkids")
 
-tabs = st.tabs(["📍 Asistencia", "👶 Estudiantes", "👥 Acudientes", "🔗 Vincular"])
+tabs = st.tabs(["📍 Asistencia", "👶 Estudiantes", "👥 Acudientes", "🔗 Vincular", "📅 Hoy"])
 
 # --- TAB: ASISTENCIA ---
 with tabs[0]:
     st.subheader("Registrar Asistencia")
     df_est = cargar_datos("Estudiantes")
-    
+
     if not df_est.empty:
-        df_est['Selector'] = df_est['Identificación'].astype(str) + " - " + df_est['Primer Nombre'] + " " + df_est['Primer Apellido']
+        # Convertir identificación a string limpio (sin .0)
+        df_est['Identificación'] = df_est['Identificación'].astype(str).str.replace(r'\.0$', '', regex=True)
+        df_est['Selector'] = df_est['Identificación'] + " - " + df_est['Primer Nombre'] + " " + df_est['Primer Apellido']
         seleccion = st.selectbox("Seleccione el Estudiante", df_est['Selector'].tolist())
         id_estudiante = seleccion.split(" - ")[0]
 
@@ -66,7 +65,7 @@ with tabs[1]:
         p_a = st.text_input("Primer Apellido")
         s_a = st.text_input("Segundo Apellido")
         f_n = st.date_input("Fecha Nacimiento", min_value=datetime(2010, 1, 1))
-        
+
         if st.form_submit_button("Guardar"):
             nuevo_e = pd.DataFrame([{
                 "Identificación": id_e, "Primer Nombre": p_n, "Segundo Nombre": s_n,
@@ -83,7 +82,7 @@ with tabs[2]:
         ced = st.text_input("Cédula Acudiente")
         nom = st.text_input("Nombre Completo")
         cel = st.text_input("Celular")
-        
+
         if st.form_submit_button("Guardar Acudiente"):
             nuevo_a = pd.DataFrame([{
                 "Nombre Acudiente": nom, "Celular Acudiente": cel, "Cedula Acudiente": ced
@@ -97,18 +96,69 @@ with tabs[3]:
     st.subheader("Relacionar Estudiante y Acudiente")
     df_e = cargar_datos("Estudiantes")
     df_a = cargar_datos("Acudiente")
-    
+
     if not df_e.empty and not df_a.empty:
+        # Limpiar IDs (quitar .0)
+        df_e['Identificación'] = df_e['Identificación'].astype(str).str.replace(r'\.0$', '', regex=True)
+        df_a['Cedula Acudiente'] = df_a['Cedula Acudiente'].astype(str).str.replace(r'\.0$', '', regex=True)
+
+        # Mostrar nombres en lugar de solo cédulas
+        df_e['Selector Est'] = df_e['Identificación'] + " - " + df_e['Primer Nombre'] + " " + df_e['Primer Apellido']
+        df_a['Selector Acu'] = df_a['Cedula Acudiente'] + " - " + df_a['Nombre Acudiente']
+
         col1, col2 = st.columns(2)
-        est_id = col1.selectbox("Estudiante", df_e['Identificación'].tolist())
-        acu_id = col2.selectbox("Acudiente (Cédula)", df_a['Cedula Acudiente'].tolist())
-        
+        sel_est = col1.selectbox("Estudiante", df_e['Selector Est'].tolist())
+        sel_acu = col2.selectbox("Acudiente", df_a['Selector Acu'].tolist())
+
+        est_id = sel_est.split(" - ")[0]
+        acu_id = sel_acu.split(" - ")[0]
+
         if st.button("Vincular"):
             vinculo = pd.DataFrame([{
-                "Identificacion Estudiante": est_id, "Cedula Acudiente": acu_id
+                "Identificacion Estudiante": est_id,
+                "Cedula Acudiente": acu_id
             }])
             guardar_datos("Acudiente Estudiantes", vinculo)
-            st.success("✅ Vínculo creado.")
+            st.success(f"✅ Vínculo creado: {sel_est} ↔ {sel_acu}")
             st.rerun()
     else:
         st.warning("Debes tener estudiantes y acudientes registrados primero.")
+
+# --- TAB: HOY ---
+with tabs[4]:
+    hoy = datetime.now().strftime("%Y-%m-%d")
+    st.subheader(f"📅 Asistencia de Hoy — {hoy}")
+
+    df_asist = cargar_datos("Asistencia")
+    df_est = cargar_datos("Estudiantes")
+
+    if not df_asist.empty:
+        # Limpiar y filtrar solo registros de hoy
+        df_asist['Fecha Asistencia'] = df_asist['Fecha Asistencia'].astype(str).str[:10]
+        df_hoy = df_asist[df_asist['Fecha Asistencia'] == hoy].copy()
+
+        if not df_hoy.empty:
+            # Limpiar IDs para el join
+            df_hoy['Identificacion Estudiante'] = df_hoy['Identificacion Estudiante'].astype(str).str.replace(r'\.0$', '', regex=True)
+            df_est['Identificación'] = df_est['Identificación'].astype(str).str.replace(r'\.0$', '', regex=True)
+
+            # Cruzar con nombres
+            df_hoy = df_hoy.merge(
+                df_est[['Identificación', 'Primer Nombre', 'Primer Apellido']],
+                left_on='Identificacion Estudiante',
+                right_on='Identificación',
+                how='left'
+            )
+            df_hoy['Nombre Completo'] = df_hoy['Primer Nombre'] + " " + df_hoy['Primer Apellido']
+
+            # Mostrar tabla limpia
+            st.metric("Total asistentes hoy", len(df_hoy))
+            st.dataframe(
+                df_hoy[['Nombre Completo', 'Identificacion Estudiante', 'Hora Asistencia']],
+                use_container_width=True,
+                hide_index=True
+            )
+        else:
+            st.info("No hay registros de asistencia para hoy todavía.")
+    else:
+        st.info("No hay registros de asistencia aún.")
