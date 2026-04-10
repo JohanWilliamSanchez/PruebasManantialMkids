@@ -16,15 +16,17 @@ def cargar_datos(nombre_hoja):
         return pd.DataFrame()
 
 def guardar_datos(nombre_hoja, df_nuevo):
-    """Lee los datos existentes, agrega la nueva fila y actualiza la hoja."""
     df_existente = cargar_datos(nombre_hoja)
     
     if df_existente.empty:
         df_final = df_nuevo
     else:
+        # Alinear columnas para evitar desorden
         df_final = pd.concat([df_existente, df_nuevo], ignore_index=True)
+        df_final = df_final[df_existente.columns]  # <- mantiene el orden de columnas original
     
     conn.update(worksheet=nombre_hoja, data=df_final)
+    st.cache_data.clear()  # <- fuerza recarga en la siguiente lectura
 
 st.title("⛪ Sistema de Gestión Manantial Mkids")
 
