@@ -1,4 +1,4 @@
-```python
+
 import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
@@ -176,4 +176,3 @@ with tabs[4]:
                     use_container_width=True,
                     hide_index=True
                 )
-```
