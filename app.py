@@ -21,8 +21,8 @@ def guardar_datos(nombre_hoja, df_nuevo):
     if df_existente.empty:
         df_final = df_nuevo
     else:
+        # Unir sin forzar orden de columnas — evita borrar datos
         df_final = pd.concat([df_existente, df_nuevo], ignore_index=True)
-        df_final = df_final[df_existente.columns]
     conn.update(worksheet=nombre_hoja, data=df_final)
     st.cache_data.clear()
 
