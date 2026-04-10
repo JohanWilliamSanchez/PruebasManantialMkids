@@ -1,34 +1,45 @@
 import streamlit as st
 from streamlit_gsheets import GSheetsConnection
+import pandas as pd
 
-st.title("🔍 Explorador de Hojas - Manantial")
-
-# Conexión
-conn = st.connection("gsheets", type=GSheetsConnection)
-
-st.write("Conectando al Spreadsheet...")
+st.title("🧪 Prueba de Conexión a Google Sheets")
 
 try:
-    # Este comando 'client' nos da acceso directo a la librería gspread que usa por debajo
-    # para listar todos los nombres de las pestañas
-    client = conn.client
-    # Obtenemos el ID del spreadsheet desde la URL que pusiste en los secrets
-    spreadsheet_id = st.secrets["connections"]["gsheets"]["spreadsheet"].split("/d/")[1].split("/")[0]
+    # Crear la conexión
+    conn = st.connection("gsheets", type=GSheetsConnection)
     
-    # Abrimos el archivo y listamos las hojas
-    sh = client.open_by_key(spreadsheet_id)
-    hojas = sh.worksheets()
+    # Leer datos directamente (esto valida la conexión sin usar .client)
+    df = conn.read()
     
-    nombres_hojas = [hoja.title for hoja in hojas]
-
-    st.success(f"¡Conexión exitosa! He encontrado {len(nombres_hojas)} hojas:")
-    
-    # Mostramos la lista con viñetas
-    for nombre in nombres_hojas:
-        st.markdown(f"* **`{nombre}`**")
-    
-    st.info("💡 Copia el nombre tal cual aparece arriba (incluyendo espacios o mayúsculas) y úsalo en tu código de asistencia.")
+    st.success("✅ ¡CONEXIÓN EXITOSA!")
+    st.write(f"**Filas encontradas:** {len(df)}")
+    st.dataframe(df.head(10))
 
 except Exception as e:
-    st.error("No pude listar las hojas.")
-    st.exception(e)
+    st.error("❌ LA CONEXIÓN FALLÓ")
+    error_str = str(e)
+    st.write(f"Error técnico: `{error_str}`")
+    
+    # Diagnóstico
+    st.write("---")
+    st.write("### Verificación de Secrets:")
+    try:
+        url = st.secrets["connections"]["gsheets"]["spreadsheet"]
+        st.success(f"✅ Secret encontrado: `{url[:50]}...`")
+    except Exception as se:
+        st.error(f"❌ Secret NO encontrado: `{str(se)}`")
+        st.code("""
+# Crea el archivo: .streamlit/secrets.toml
+[connections.gsheets]
+spreadsheet = "https://docs.google.com/spreadsheets/d/TU_ID_AQUI"
+type = "service_account"
+project_id = "tu-proyecto"
+private_key_id = "..."
+private_key = \"\"\"-----BEGIN PRIVATE KEY-----
+...
+-----END PRIVATE KEY-----\"\"\"
+client_email = "...@....iam.gserviceaccount.com"
+client_id = "..."
+auth_uri = "https://accounts.google.com/o/oauth2/auth"
+token_uri = "https://oauth2.googleapis.com/token"
+        """, language="toml")
