@@ -1,57 +1,34 @@
 import streamlit as st
 from streamlit_gsheets import GSheetsConnection
-import pandas as pd
-from datetime import datetime
 
-st.set_page_config(page_title="Asistencia Manantial", layout="centered")
-
-st.title("🚀 Gestión de Asistencia Manantial ")
+st.title("🔍 Explorador de Hojas - Manantial")
 
 # Conexión
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# 1. Leer datos de la pestaña 'Estudiantes'
-# Asegúrate que en el Excel la pestaña se llame exactamente: Estudiantes
+st.write("Conectando al Spreadsheet...")
+
 try:
-    df_estudiantes = conn.read(worksheet="Estudiantes")
+    # Este comando 'client' nos da acceso directo a la librería gspread que usa por debajo
+    # para listar todos los nombres de las pestañas
+    client = conn.client
+    # Obtenemos el ID del spreadsheet desde la URL que pusiste en los secrets
+    spreadsheet_id = st.secrets["connections"]["gsheets"]["spreadsheet"].split("/d/")[1].split("/")[0]
     
-    # Crear un nombre completo para mostrar en el buscador
-    df_estudiantes['Nombre Completo'] = df_estudiantes['Primer Nombre'] + " " + df_estudiantes['Primer Apellido']
+    # Abrimos el archivo y listamos las hojas
+    sh = client.open_by_key(spreadsheet_id)
+    hojas = sh.worksheets()
     
-    st.subheader("Registrar nueva asistencia")
-    
-    # Buscador de niños
-    seleccion = st.selectbox(
-        "Selecciona al niño/a:", 
-        options=df_estudiantes['Identificación'].tolist(),
-        format_func=lambda x: df_estudiantes[df_estudiantes['Identificación'] == x]['Nombre Completo'].iloc[0]
-    )
+    nombres_hojas = [hoja.title for hoja in hojas]
 
-    fecha = st.date_input("Fecha de asistencia", datetime.now())
-    hora = datetime.now().strftime("%H:%M:%S")
-
-    if st.button("Registrar Asistencia"):
-        # Estructura para la pestaña 'Asistencia'
-        nueva_asistencia = pd.DataFrame([{
-            "Identificacion Estudiante": seleccion,
-            "Fecha Asistencia": str(fecha),
-            "Hora Asistencia": hora,
-            "Domingos Sin Asistir": 0
-        }])
-        
-        # Actualizar el Google Sheet
-        # Nota: La pestaña en el Excel debe llamarse: Asistencia
-        conn.create(worksheet="Asistencia", data=nueva_asistencia)
-        st.success(f"¡Asistencia registrada para el ID {seleccion}!")
-        st.balloons()
+    st.success(f"¡Conexión exitosa! He encontrado {len(nombres_hojas)} hojas:")
+    
+    # Mostramos la lista con viñetas
+    for nombre in nombres_hojas:
+        st.markdown(f"* **`{nombre}`**")
+    
+    st.info("💡 Copia el nombre tal cual aparece arriba (incluyendo espacios o mayúsculas) y úsalo en tu código de asistencia.")
 
 except Exception as e:
-    st.error(f"Error de conexión o nombres de pestañas: {e}")
-    st.info("Revisa que las pestañas en tu Excel se llamen 'Estudiantes' y 'Asistencia'")
-
-# 2. Visualización simple
-st.divider()
-st.subheader("Resumen de hoy")
-if st.button("Ver lista de hoy"):
-    asistencias_hoy = conn.read(worksheet="Asistencia")
-    st.write(asistencias_hoy)
+    st.error("No pude listar las hojas.")
+    st.exception(e)
