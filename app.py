@@ -5,10 +5,8 @@ from datetime import datetime
 
 st.set_page_config(page_title="Gestión Mkids", layout="wide")
 
-# Conexión
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# Función para leer datos de forma segura
 def cargar_datos(nombre_hoja):
     try:
         df = conn.read(worksheet=nombre_hoja, ttl=0)
@@ -17,6 +15,17 @@ def cargar_datos(nombre_hoja):
     except Exception:
         return pd.DataFrame()
 
+def guardar_datos(nombre_hoja, df_nuevo):
+    """Lee los datos existentes, agrega la nueva fila y actualiza la hoja."""
+    df_existente = cargar_datos(nombre_hoja)
+    
+    if df_existente.empty:
+        df_final = df_nuevo
+    else:
+        df_final = pd.concat([df_existente, df_nuevo], ignore_index=True)
+    
+    conn.update(worksheet=nombre_hoja, data=df_final)
+
 st.title("⛪ Sistema de Gestión Manantial Mkids")
 
 tabs = st.tabs(["📍 Asistencia", "👶 Estudiantes", "👥 Acudientes", "🔗 Vincular"])
@@ -24,25 +33,24 @@ tabs = st.tabs(["📍 Asistencia", "👶 Estudiantes", "👥 Acudientes", "🔗 
 # --- TAB: ASISTENCIA ---
 with tabs[0]:
     st.subheader("Registrar Asistencia")
-    df_est = cargar_datos("Estudiantes") # Cambiado de Hoja 1 a Estudiantes
+    df_est = cargar_datos("Estudiantes")
     
     if not df_est.empty:
-        # Creamos una lista amigable para el selector
         df_est['Selector'] = df_est['Identificación'].astype(str) + " - " + df_est['Primer Nombre'] + " " + df_est['Primer Apellido']
         seleccion = st.selectbox("Seleccione el Estudiante", df_est['Selector'].tolist())
         id_estudiante = seleccion.split(" - ")[0]
 
         if st.button("Registrar Entrada"):
-            asistencia_df = pd.DataFrame([{
+            nueva_asistencia = pd.DataFrame([{
                 "Identificacion Estudiante": id_estudiante,
                 "Fecha Asistencia": datetime.now().strftime("%Y-%m-%d"),
                 "Hora Asistencia": datetime.now().strftime("%H:%M:%S"),
                 "Domingos Sin Asistir": 0
             }])
-            conn.create(worksheet="Asistencia", data=asistencia_df)
+            guardar_datos("Asistencia", nueva_asistencia)
             st.success("✅ Asistencia registrada correctamente.")
             st.balloons()
-            st.rerun() # Limpia la pantalla
+            st.rerun()
     else:
         st.error("No hay estudiantes registrados aún.")
 
@@ -62,8 +70,8 @@ with tabs[1]:
                 "Identificación": id_e, "Primer Nombre": p_n, "Segundo Nombre": s_n,
                 "Primer Apellido": p_a, "Segundo Apellido": s_a, "Fecha Nacimiento": str(f_n)
             }])
-            conn.create(worksheet="Estudiantes", data=nuevo_e)
-            st.success("Estudiante guardado.")
+            guardar_datos("Estudiantes", nuevo_e)
+            st.success("✅ Estudiante guardado.")
             st.rerun()
 
 # --- TAB: ACUDIENTES ---
@@ -78,8 +86,8 @@ with tabs[2]:
             nuevo_a = pd.DataFrame([{
                 "Nombre Acudiente": nom, "Celular Acudiente": cel, "Cedula Acudiente": ced
             }])
-            conn.create(worksheet="Acudiente", data=nuevo_a)
-            st.success("Acudiente guardado.")
+            guardar_datos("Acudiente", nuevo_a)
+            st.success("✅ Acudiente guardado.")
             st.rerun()
 
 # --- TAB: VINCULAR ---
@@ -97,6 +105,8 @@ with tabs[3]:
             vinculo = pd.DataFrame([{
                 "Identificacion Estudiante": est_id, "Cedula Acudiente": acu_id
             }])
-            conn.create(worksheet="Acudiente Estudiantes", data=vinculo)
-            st.success("Vínculo creado.")
+            guardar_datos("Acudiente Estudiantes", vinculo)
+            st.success("✅ Vínculo creado.")
             st.rerun()
+    else:
+        st.warning("Debes tener estudiantes y acudientes registrados primero.")
